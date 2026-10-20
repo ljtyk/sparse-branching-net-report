@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="A toy-scale investigation of whether Mixture-of-Experts routing self-organizes into useful modular structure: modular arithmetic, a byte/token language model, a nine-experiment study of per-token switching, and a shared expert pool with adaptive depth.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Ctext y=%27.9em%27 font-size=%2790%27%3E%F0%9F%94%80%3C/text%3E%3C/svg%3E">
+<title>Self-Organizing Sparse Branching Nets</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  :root{
+    --ground:#FAFBFC; --surface:#EEF0F3; --surface-2:#E4E7EB;
+    --ink:#191C20; --ink-soft:#565D66; --ink-faint:#889099;
+    --rule:#D8DCE1; --rule-strong:#BFC5CC;
+    --accent:#2F53C9; --accent-soft:#E7ECFB;
+    --flag:#AE430D; --flag-soft:#F5E8E1;
+    --pos:#1C7248; --pos-soft:#E3F1E9;
+    --serif:"Source Serif 4",Georgia,"Times New Roman",serif;
+    --sans:"Libre Franklin","Helvetica Neue",Arial,sans-serif;
+    --mono:"JetBrains Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --ground:#131519; --surface:#1B1E24; --surface-2:#242830;
+      --ink:#E7E9EC; --ink-soft:#9AA2AC; --ink-faint:#6A7480;
+      --rule:#2D323A; --rule-strong:#3C424C;
+      --accent:#7D9BFF; --accent-soft:#1E2740;
+      --flag:#E7895C; --flag-soft:#31221B;
+      --pos:#5BC08B; --pos-soft:#17271F;
+    }
+  }
+  :root[data-theme="dark"]{
+    --ground:#131519; --surface:#1B1E24; --surface-2:#242830;
+    --ink:#E7E9EC; --ink-soft:#9AA2AC; --ink-faint:#6A7480;
+    --rule:#2D323A; --rule-strong:#3C424C;
+    --accent:#7D9BFF; --accent-soft:#1E2740;
+    --flag:#E7895C; --flag-soft:#31221B;
+    --pos:#5BC08B; --pos-soft:#17271F;
+  }
+
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0; background:var(--ground); color:var(--ink);
+    font-family:var(--serif); font-size:18px; line-height:1.62;
+    font-optical-sizing:auto;
+  }
+  .wrap{max-width:1040px; margin:0 auto; padding:0 24px}
+  .col{max-width:680px}
+
+  /* ---- masthead ---- */
+  header{border-bottom:1px solid var(--rule-strong); padding:64px 0 34px; margin-bottom:16px}
+  .kicker{
+    font-family:var(--sans); font-weight:600; font-size:12.5px; letter-spacing:.13em;
+    text-transform:uppercase; color:var(--accent); margin:0 0 18px;
+  }
+  h1{
+    font-family:var(--sans); font-weight:700; font-size:clamp(30px,4.6vw,46px);
+    line-height:1.08; letter-spacing:-.018em; text-wrap:balance; margin:0 0 20px;
+  }
+  .standfirst{font-size:20px; color:var(--ink-soft); margin:0; max-width:640px}
+  .meta{
+    font-family:var(--mono); font-size:12.5px; color:var(--ink-faint);
+    margin-top:26px; display:flex; flex-wrap:wrap; gap:8px 22px;
+  }
+
+  main{padding:14px 0 90px}
+  section{padding:34px 0; border-top:1px solid var(--rule)}
+  section:first-of-type{border-top:0}
+  .part-label{
+    font-family:var(--sans); font-weight:600; font-size:12.5px; letter-spacing:.12em;
+    text-transform:uppercase; color:var(--ink-faint); margin:0 0 6px;
+  }
+  h2{
+    font-family:var(--sans); font-weight:700; font-size:26px; line-height:1.15;
+    letter-spacing:-.01em; text-wrap:balance; margin:0 0 18px;
+  }
+  h3{
+    font-family:var(--sans); font-weight:600; font-size:17px; letter-spacing:.005em;
+    margin:30px 0 8px;
+  }
+  p{margin:0 0 16px; max-width:680px}
+  p.wide{max-width:none}
+  a{color:var(--accent); text-decoration:none; border-bottom:1px solid color-mix(in srgb,var(--accent) 35%,transparent)}
+  a:hover{border-bottom-color:var(--accent)}
+  strong{font-weight:600}
+  em{font-style:italic}
+  code,.m{font-family:var(--mono); font-size:.855em; background:var(--surface);
+    padding:.08em .34em; border-radius:3px; color:var(--ink)}
+  .lede{font-size:19px}
+
+  ul{margin:0 0 16px; padding-left:1.15em; max-width:680px}
+  li{margin:0 0 8px}
+  li::marker{color:var(--ink-faint)}
+
+  /* ---- tables ---- */
+  .scroll{overflow-x:auto; margin:22px 0; border:1px solid var(--rule); border-radius:8px}
+  table{border-collapse:collapse; width:100%; font-family:var(--sans); font-size:14px}
+  caption{
+    caption-side:top; text-align:left; font-family:var(--sans); font-weight:600;
+    font-size:13px; color:var(--ink-soft); padding:12px 14px 10px;
+    border-bottom:1px solid var(--rule);
+  }
+  th,td{padding:9px 14px; text-align:right; font-variant-numeric:tabular-nums;
+    border-bottom:1px solid var(--rule); white-space:nowrap}
+  th:first-child,td:first-child{text-align:left; white-space:normal; min-width:150px}
+  thead th{
+    font-weight:600; font-size:12px; letter-spacing:.03em; color:var(--ink-soft);
+    background:var(--surface); border-bottom:1px solid var(--rule-strong);
+  }
+  tbody tr:last-child td{border-bottom:0}
+  td.hl{color:var(--accent); font-weight:600}
+  td.dim{color:var(--ink-faint)}
+
+  /* ---- scorecard ---- */
+  .cards{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:24px 0}
+  @media (max-width:640px){.cards{grid-template-columns:1fr}}
+  .card{border:1px solid var(--rule); border-radius:10px; padding:18px 18px 6px; background:var(--surface)}
+  .card h4{
+    font-family:var(--sans); font-size:13px; font-weight:600; letter-spacing:.02em;
+    margin:0 0 12px; display:flex; align-items:center; gap:8px;
+  }
+  .card.ok h4{color:var(--pos)} .card.no h4{color:var(--flag)}
+  .dot{width:9px; height:9px; border-radius:50%; flex:none}
+  .card.ok .dot{background:var(--pos)} .card.no .dot{background:var(--flag)}
+  .card ul{font-family:var(--sans); font-size:13.5px; line-height:1.5; padding-left:1.05em; max-width:none}
+  .card li{margin-bottom:9px}
+
+  /* ---- callout ---- */
+  .note{
+    border-left:3px solid var(--accent); background:var(--accent-soft);
+    padding:14px 18px; margin:22px 0; border-radius:0 8px 8px 0;
+    font-size:16.5px;
+  }
+  .note.flag{border-left-color:var(--flag); background:var(--flag-soft)}
+  .note p{margin:0; max-width:none}
+  .note p+p{margin-top:10px}
+
+  /* ---- chart ---- */
+  figure{margin:26px 0; padding:20px 20px 8px; border:1px solid var(--rule);
+    border-radius:10px; background:var(--surface)}
+  figure svg{display:block; width:100%; height:auto; overflow:visible}
+  figcaption{font-family:var(--sans); font-size:12.5px; color:var(--ink-soft);
+    margin-top:12px; line-height:1.45}
+  .ax{fill:var(--ink-faint); font-family:"JetBrains Mono",monospace; font-size:11px}
+  .axl{fill:var(--ink-soft); font-family:"Libre Franklin",sans-serif; font-size:11px; font-weight:600}
+  .gl{stroke:var(--rule); stroke-width:1}
+  .ln{stroke:var(--accent); stroke-width:2; fill:none}
+  .pt{fill:var(--ground); stroke:var(--accent); stroke-width:2}
+  .ptv{fill:var(--ink); font-family:"JetBrains Mono",monospace; font-size:11px}
+
+  .foot{margin-top:40px; padding-top:20px; border-top:1px solid var(--rule);
+    font-family:var(--sans); font-size:12.5px; color:var(--ink-faint); max-width:none}
+
+  @media (max-width:520px){
+    body{font-size:16.5px}
+    header{padding:44px 0 28px}
+    .meta{gap:6px 16px}
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+<header>
+  <div class="col">
+    <p class="kicker">Research summary</p>
+    <h1>Self-Organizing Sparse Branching Nets</h1>
+    <p class="standfirst">Does a dense network, under gradient descent and with no task label, self-organize into reusable task-specialized sparse routing &mdash; and is that structure computationally useful? A toy-scale investigation, fully instrumented.</p>
+    <div class="meta">
+      <span>modular arithmetic &rarr; byte / token LM</span>
+      <span>small nets, ~1&ndash;9M params</span>
+      <span>single RTX 4080</span>
+    </div>
+  </div>
+</header>
+
+<main>
+
+<section>
+  <div class="col">
+  <p class="lede">The premise is <strong>Option A</strong>: the router is never told which task a token belongs to. It sees only content and must discover any task-aligned routing itself. The real signal throughout is mutual information between the routing path and the task label, always read against a shuffled-label control &mdash; structure only counts if it beats the null.</p>
+  <p>The work ran in four phases: a synthetic task where the ground truth is known exactly; an extension to real text; &mdash; when the text results turned out ambiguous &mdash; a nine-experiment study of why the router behaves the way it does; and a follow-up that replaces per-layer experts with one shared pool and an adaptive-depth head. This summarizes all four and states plainly what was and was not established.</p>
+  </div>
+</section>
+
+<section>
+  <div class="col">
+  <p class="part-label">Part I</p>
+  <h2>Synthetic: modular arithmetic</h2>
+  <p>Arithmetic mod&nbsp;P&nbsp;=&nbsp;97, with the operation playing the role of a hidden task cluster on a K&nbsp;&isin;&nbsp;{2,&nbsp;4,&nbsp;8} diversity ladder. Trained in a grokking regime (weight decay 1.0) so the network is forced to generalize rather than memorize. Backbone: a residual MLP tower, <span class="m">d=128</span>, four layers, <span class="m">E=2K</span> experts per layer, one active, per-layer Gumbel-softmax router.</p>
+
+  <h3>What happened</h3>
+  <ul>
+    <li><strong>Self-organization is real.</strong> With no operation signal to the router, MI(path;&nbsp;op) reaches 0.93&ndash;1.0&nbsp;bits at K=2 and <strong>2.0&nbsp;bits &mdash; the ceiling &mdash; at K=4</strong>, against roughly zero for shuffled labels.</li>
+    <li><strong>The mechanism is legible.</strong> The four layers run a fixed three-stage algorithm: L0 splits per operation; L1 <em>merges into families</em> the design never specified (<span class="m">{add,sub}</span> share an expert, <span class="m">{mul,div}</span> share another); L3 is an answer read-out that routes by the <em>computed result</em>, not the operation (MI with the result &approx; 1.3&nbsp;bits vs &approx; 0.1 with the operands).</li>
+    <li><strong>At K=8, sparse beats dense at matched active compute.</strong> This is the first task size where the margin opens &mdash; K&nbsp;&le;&nbsp;4 were ties because one dense expert already solves them.</li>
+  </ul>
+
+  <div class="scroll">
+    <table>
+      <caption>K=8 validation accuracy, mean of 3 seeds &middot; matched active compute</caption>
+      <thead><tr><th>arm</th><th>val acc</th><th>note</th></tr></thead>
+      <tbody>
+        <tr><td>dense (E=1)</td><td>0.989</td><td class="dim">baseline</td></tr>
+        <tr><td>sparse, vanilla</td><td>0.989</td><td class="dim">tied &mdash; no margin without the gate</td></tr>
+        <tr><td>sparse + alive-gate</td><td class="hl">0.994</td><td class="dim">every seed beats every dense seed</td></tr>
+        <tr><td>oracle (tight)</td><td>0.998</td><td class="dim">routing handed the ground truth</td></tr>
+        <tr><td>random routing</td><td>0.125</td><td class="dim">chance</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>The <strong>alive-gate</strong> &mdash; a per-expert learned scale with an L1 penalty, ramped in after grokking &mdash; is what surfaces the margin: it removes near-tie routing noise so the network can report its own per-layer width (e.g. <span class="m">[4,&nbsp;2,&nbsp;1,&nbsp;2]</span> of 32 slots at K=4).</p>
+
+  <div class="note flag">
+    <p><strong>Caveats.</strong> Three seeds, not the five-plus that reproducibility needs. The family groupings are <em>seed-dependent</em>: seed&nbsp;0 finds the clean four-way split (MI = 3.0), seed&nbsp;1 merges linear&nbsp;&cup;&nbsp;sympow onto one branch (MI drops to 2.75), seed&nbsp;2 mixes cross-family pairs.</p>
+    <p>Tracing the metrics shows why: MI is <strong>flat from the moment grokking completes</strong> (~step 5000) through step 35000. Seed&nbsp;1's information-losing merge was decided ~14000 steps before the sparsity penalty even begins to act. Which efficient decomposition a seed finds is locked during grokking itself &mdash; a metastable-minimum effect, not an under-optimized objective. More or stronger regularization cannot fix it.</p>
+  </div>
+  </div>
+</section>
+
+<section>
+  <div class="col">
+  <p class="part-label">Part II</p>
+  <h2>Real text: the language-model extension</h2>
+  <p>A nanoGPT-shaped byte-level LM (<span class="m">d_model=128</span>, 4 layers, <span class="m">seq_len=128</span>), experts in the FFN only, same routing machinery. Task: a hybrid corpus &mdash; four languages including Chinese and Japanese, literary prose and poetry, and Python / JavaScript source. Metric: bits per byte.</p>
+
+  <h3>The phenomenon replicates</h3>
+  <p>Sparse beats dense on every language, MI(path;&nbsp;source) climbs to near its ceiling against a flat shuffled control (2.67&nbsp;/&nbsp;3.0 vs 0.48 on the hybrid corpus; a linear probe reads source at 96.5%). The design doc's originally-planned contrastive path loss also works &mdash; MI to ceiling, no over-collapse, ~0.5% bpb cost. This is the GShard / Switch Transformer language-specialization result at a scale where every routing decision is visible.</p>
+
+  <h3>But the controls deflate it</h3>
+  <ul>
+    <li><strong>A no-model baseline recovers most of it.</strong> A bag-of-byte-bigrams logistic probe &mdash; no network at all &mdash; predicts source at 0.83; the trained path vector manages 0.94 (chance 0.125). Much of the &ldquo;specialization&rdquo; is surface byte statistics.</li>
+    <li><strong>Substitution test: ~5 of 8 sources route on structure, not content.</strong> Swap a window's vocabulary but keep its punctuation and layout and routing does not move &mdash; for Python, JavaScript, prose and French. English routes <em>almost entirely on punctuation</em>: strip it and the probe falls from 0.97 to 0.05. Only German (and partly Spanish) route on lexical content that survives both controls &mdash; and even that is word identity, not meaning.</li>
+    <li><strong>At the token level, there are dedicated punctuation and whitespace experts.</strong> By layer&nbsp;2 one expert is 65% punctuation (13&times; its corpus rate); a period routes to the same expert 100% of the time, in English, Japanese and Python alike. Layer&nbsp;0 shows no such structure &mdash; it develops through depth.</li>
+  </ul>
+
+  <p>This lands squarely with the skeptical wing of the current MoE-interpretability literature (the &ldquo;standing committee&rdquo; and &ldquo;routing reflects geometry&rdquo; results, and the polysemy / substitution method those tests are borrowed from). What looks like domain expertise is substantially surface form.</p>
+  </div>
+</section>
+
+<section>
+  <div class="col">
+  <p class="part-label">Part III</p>
+  <h2>Why the router switches every token</h2>
+  <p>Byte-level, per-token routing switches expert on ~80% of transitions &mdash; mean run length ~1.3 &mdash; and a single 128-byte window touches <strong>74% of all expert-slots</strong>. At sequence granularity there is no parameter sparsity; the MoE behaves like structured dropout on a wide FFN. Seven attempts to change that, plus two follow-ons:</p>
+  </div>
+
+  <div class="scroll">
+    <table>
+      <caption>Interventions vs. the byte E=8 baseline (run length ~1.6, ~6/8 experts per sequence)</caption>
+      <thead><tr><th>intervention</th><th>run length</th><th>bpb</th><th>effect</th></tr></thead>
+      <tbody>
+        <tr><td>1 &nbsp; persistence penalty &nbsp;<span class="m">&lambda;=0.03</span></td><td>~2.0</td><td>1.95</td><td class="dim">near-free, but only helps CJK / code</td></tr>
+        <tr><td>&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;<span class="m">&lambda;=0.1</span></td><td>~25</td><td>2.03</td><td class="dim">collapse &mdash; 5 experts, MI halved</td></tr>
+        <tr><td>2 &nbsp; per-sequence coverage</td><td class="dim">&mdash;</td><td class="dim">&mdash;</td><td class="dim">window touches 74% of slots; no sparsity to find</td></tr>
+        <tr><td>3 &nbsp; expert-count sweep</td><td class="dim">&mdash;</td><td>2.15&rarr;1.94</td><td class="dim">width helps ~10%; E=8 already = 85% of it</td></tr>
+        <tr><td>4 &nbsp; byte-class span routing</td><td class="dim">&mdash;</td><td class="dim">&mdash;</td><td class="dim">fixed surface boundaries &mdash; relocates, doesn't fix</td></tr>
+        <tr><td>5 &nbsp; router hysteresis</td><td>~1.7</td><td>2.3&nbsp;@&nbsp;&gamma;=8</td><td class="dim">trained router's logit gaps (~10) defeat the bonus</td></tr>
+        <tr><td>6 &nbsp; subword BPE tokens</td><td class="hl">2.2&nbsp;/&nbsp;2.4</td><td>2.01</td><td class="dim">experts become content-aligned; still a lookup</td></tr>
+        <tr><td>7 &nbsp; router memory (prev + cross-layer)</td><td class="hl">2.9&nbsp;(L3)</td><td>2.02</td><td class="dim">CJK &rarr; one expert per window; prose flat</td></tr>
+        <tr><td>+ &nbsp; drop the load-balance loss</td><td>2.5</td><td>2.09</td><td class="dim">prose content entropy 1.87&rarr;1.39; switches 61%&rarr;49%</td></tr>
+        <tr><td>+ &nbsp; top-2 gating + shared expert</td><td>2.0&nbsp;(L3)</td><td>1.80</td><td class="dim">bpb ~10% better; routing more diffuse (3.4&rarr;4.6 experts per sequence)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <figure>
+    <svg viewBox="0 0 480 250" role="img" aria-label="Bits per byte against expert count: 2.148 at E=1, 2.019 at E=4, 1.973 at E=8, 1.941 at E=16.">
+      <line class="gl" x1="56" y1="30" x2="56" y2="196"></line>
+      <line class="gl" x1="56" y1="196" x2="452" y2="196"></line>
+      <g>
+        <text class="ax" x="48" y="34" text-anchor="end">2.20</text>
+        <text class="ax" x="48" y="89" text-anchor="end">2.10</text>
+        <text class="ax" x="48" y="145" text-anchor="end">2.00</text>
+        <text class="ax" x="48" y="200" text-anchor="end">1.90</text>
+        <line class="gl" x1="53" y1="30" x2="56" y2="30"></line>
+        <line class="gl" x1="53" y1="85.5" x2="56" y2="85.5"></line>
+        <line class="gl" x1="53" y1="141" x2="56" y2="141"></line>
+      </g>
+      <g>
+        <text class="ax" x="90" y="212" text-anchor="middle">1</text>
+        <text class="ax" x="210" y="212" text-anchor="middle">4</text>
+        <text class="ax" x="330" y="212" text-anchor="middle">8</text>
+        <text class="ax" x="430" y="212" text-anchor="middle">16</text>
+        <text class="axl" x="254" y="238" text-anchor="middle">experts in the pool</text>
+      </g>
+      <text class="axl" x="16" y="113" text-anchor="middle" transform="rotate(-90 16 113)">val bpb</text>
+      <polyline class="ln" points="90,58.6 210,130.0 330,155.4 430,173.1"></polyline>
+      <circle class="pt" cx="90" cy="58.6" r="4"></circle>
+      <circle class="pt" cx="210" cy="130.0" r="4"></circle>
+      <circle class="pt" cx="330" cy="155.4" r="4"></circle>
+      <circle class="pt" cx="430" cy="173.1" r="4"></circle>
+      <text class="ptv" x="90" y="49" text-anchor="middle">2.148</text>
+      <text class="ptv" x="210" y="121" text-anchor="middle">2.019</text>
+      <text class="ptv" x="330" y="147" text-anchor="middle">1.973</text>
+      <text class="ptv" x="430" y="165" text-anchor="end">1.941</text>
+    </svg>
+    <figcaption>The expert-count sweep, at matched per-token compute. Going from dense to sixteen experts buys ~10% bpb, but four experts already capture 62% of that and eight capture 85%. Beyond eight, more experts overfit the small corpus and <em>fragment</em> the regions that had committed &mdash; a Japanese window that routed to one expert at E=8 splits across four at E=16.</figcaption>
+  </figure>
+
+  <div class="col">
+  <div class="note">
+    <p><strong>Verdict.</strong> Given the two things the router was missing &mdash; meaningful units (subword tokens) and state (previous-position and cross-layer routing) &mdash; it <em>demonstrably can</em> commit: Chinese and Japanese windows route to a single expert end to end. It <strong>chooses not to for English prose</strong>, which keeps switching every ~1.5 tokens.</p>
+    <p>So the fast switching is <strong>optimal, not a capability limit</strong>. A sentence interleaves function words, content words and punctuation, and those need different computation. The languages that commit do so because their token streams <em>are</em> long runs of one class. The load-balance loss makes it worse by forcing the router to fragment coherent groups to fill its expert budget. A DeepSeek-style shared expert &mdash; the published fix for specialists with no common ground &mdash; improves bits-per-byte ~10% but makes the routing <em>more</em> diffuse: it takes a third of the work and the routed experts switch even more freely. MoE at this scale is a wide FFN with an input-dependent activation mask keyed on the current position's surface class &mdash; correct behavior for heterogeneous text, just not the &ldquo;modular specialists&rdquo; picture.</p>
+  </div>
+  </div>
+</section>
+
+<section>
+  <div class="col">
+  <p class="part-label">Part IV</p>
+  <h2>Shared expert pool and adaptive depth</h2>
+  <p>A follow-up that changes the routing layer itself. Instead of every layer owning private experts, <strong>one pool of 28 experts is reused at every recursion step</strong>, with a single shared router that knows which step it is on. A <strong>per-token depth head</strong> then chooses how many steps &mdash; 2, 4 or 6 &mdash; each token gets, paying a ponder cost for depth. Both ideas are published (UniPool, Mixture-of-Recursions); what is new here is testing them together under Option&nbsp;A, with a shuffled-label control and a hand-routed oracle, on a task whose structure is known.</p>
+  <p>On K=8 arithmetic, 35,000 steps, three seeds per arm:</p>
+  </div>
+
+  <div class="scroll">
+    <table>
+      <caption>K=8 arithmetic &middot; validation accuracy vs. active compute (mean of 3 seeds)</caption>
+      <thead><tr><th>arm</th><th>val acc</th><th>active MACs</th><th>depth</th></tr></thead>
+      <tbody>
+        <tr><td>dense E=1, 4 layers</td><td>0.989</td><td>274,560</td><td class="dim">&mdash;</td></tr>
+        <tr><td>per-layer experts + alive-gate</td><td>0.994</td><td>282,752</td><td class="dim">&mdash;</td></tr>
+        <tr><td>28 experts, 4 non-pooled layers</td><td>0.995</td><td>278,144</td><td>4</td></tr>
+        <tr><td>shared pool, fixed depth 4</td><td>0.994</td><td>288,896</td><td>4</td></tr>
+        <tr><td>shared pool + adaptive depth</td><td class="hl">0.998</td><td class="hl">150,656</td><td class="hl">2.0</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="col">
+  <p><strong>The adaptive model solves K=8 arithmetic in two recursion steps</strong> and beats every other arm on every seed (0.998 against 0.994&ndash;0.995), at about 53% of the active compute &mdash; a win on both axes, not a tradeoff. The depth head trims <em>every</em> operation to the minimum it was offered, because two steps genuinely suffice: per-operation accuracy at depth 2 is 0.99&ndash;1.00. Parameter count is unchanged (~1.89M).</p>
+  <p>Why would less depth win? Four things compound. Weight-tied recursion is harder to optimize the deeper it runs, since gradients pass through the same weights N times. Training the readout at every depth first is deep supervision, which regularizes. Steps taken after the answer is formed add residual updates that don't help. And weight decay at 1.0 favors the smallest circuit that generalizes.</p>
+
+  <h3>Expert reuse: a real loop, for one family</h3>
+  <p>If the pool is shared, does the same expert fire at different steps? Reuse rate is the fraction of &ldquo;could have been a new expert&rdquo; slots that were repeats, per operation family, against a shuffled-family null.</p>
+  </div>
+
+  <div class="scroll">
+    <table>
+      <caption>Expert reuse across recursion steps &middot; 6 runs (fixed-depth and adaptive, 3 seeds each)</caption>
+      <thead><tr><th>family</th><th>reuse rate</th><th>reproducible?</th></tr></thead>
+      <tbody>
+        <tr><td>mul / div</td><td class="hl">0.39 &ndash; 0.65</td><td class="hl">yes, all six runs (null 0.07 &ndash; 0.26)</td></tr>
+        <tr><td>linear (add, sub, lin23)</td><td>0.0 &ndash; 0.67</td><td class="dim">no &mdash; seed-dependent</td></tr>
+        <tr><td>sympow (sq_sum, cube_sum)</td><td>0.0 &ndash; 0.33</td><td class="dim">no</td></tr>
+        <tr><td>max</td><td>0.17 &ndash; 0.36</td><td class="dim">no</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="col">
+  <p>Multiplication and division examples route to the <strong>same expert at both steps 39&ndash;65% of the time</strong> &mdash; a learned loop, in the one family whose algorithm (<span class="m">a &middot; b<sup>&plusmn;1</sup> mod P</span>) applies a single transform twice. Every other family's occasional above-null reuse does not survive across seeds.</p>
+
+  <h3>Does depth follow difficulty? No</h3>
+  <p>All operations trim to depth 2 on all seeds. K=8 arithmetic has almost no per-operation difficulty spread &mdash; a single dense expert solves seven of eight operations at ~0.99 &mdash; so there is nothing for the head to differentiate.</p>
+  <p>The same holds on language. Ported to the transformer (one shared attention block plus a 16-expert pool, depth chosen per token), it reaches 1.95 bits per byte with 3.7M parameters, against 2.01 with 6.0M for the fixed four-layer model. But the head trims uniformly to ~4 steps for every token class &mdash; letters, whitespace, punctuation, digits and kanji all land within about 0.1 of 4.0 &mdash; and expert reuse is not source-specific (0.51&ndash;0.67 per source against a 0.58 shuffled null). Content heterogeneity, which per-token expert routing picks up, does not become compute-depth heterogeneity.</p>
+
+  <div class="note flag">
+    <p><strong>Caveats.</strong> Three seeds on arithmetic, one on the language model. The depth head only worked after the readout was trained at every depth early on: forcing full depth during grokking left the shallow readouts untrained, so the head had nothing valid to trim to and stayed at 6. Depth options were {2, 4, 6}, so 2 is the smallest depth tested; the true minimum may be 1.</p>
+  </div>
+  </div>
+</section>
+
+<section>
+  <div class="col">
+  <h2>Scorecard</h2>
+  </div>
+  <div class="cards">
+    <div class="card ok">
+      <h4><span class="dot"></span>Established</h4>
+      <ul>
+        <li>Dense nets self-organize task-aligned routing with no task label, above a shuffled-label null.</li>
+        <li>The structure is mechanistically legible at toy scale &mdash; the actual methodological contribution.</li>
+        <li>At K=8 arithmetic, sparse + alive-gate beats dense at matched active compute, non-overlapping across seeds.</li>
+        <li>On real text, the &ldquo;specialization&rdquo; is substantially surface form, and per-token switching is optimal for heterogeneous input.</li>
+        <li>A shared expert pool with an adaptive-depth head solves K=8 arithmetic in 2 recursion steps at higher accuracy and ~53% of the compute (3 seeds), and the multiplicative family reuses one expert at both steps.</li>
+      </ul>
+    </div>
+    <div class="card no">
+      <h4><span class="dot"></span>Not established</h4>
+      <ul>
+        <li>No new mechanism. The alive-gate is L0-style gating; the contrastive path loss is SupCon on the routing decision; router memory is a light recurrence; shared pools and adaptive depth are published ideas (UniPool, Mixture-of-Recursions).</li>
+        <li>Nothing that would change how MoE is built in practice.</li>
+        <li>Single-seed throughout the LM work &mdash; not reproducibility-grade.</li>
+        <li>Toy scale only; no scale-dependent claim, nothing shown to transfer.</li>
+        <li>The one candidate-original idea was never checked against the literature.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="col">
+  <h2>Two threads with any freshness</h2>
+  <p><strong>Load-balancing manufactures routing scatter.</strong> Removing the load-balance loss concentrated English content-word routing from ~4 experts onto 2, and cut consecutive-content-word switching from 61% to 49%. It reframes load-balancing as actively fighting coherent specialization to satisfy a serving-capacity objective &mdash; concrete and mechanistic, worth a multi-seed check.</p>
+  <p><strong>Dense-sufficiency predicts prunability.</strong> The alive-gate prunes freely on arithmetic (where one dense expert already suffices) and finds nothing on the LM task (where dense is measurably insufficient), across a 50&times; sweep of the penalty. The hypothesis: whether a single dense model already solves a task predicts whether its multi-expert structure is redundant. Plausible, untested against prior work &mdash; a literature search is the cheap next step and could settle whether this is a contribution or a re-derivation.</p>
+  </div>
+</section>
+
+<section>
+  <div class="col">
+  <h2>Assessment</h2>
+  <p class="lede">This is a well-executed characterization study. It confirms known MoE behavior with unusually good mechanistic transparency &mdash; controlled ground truth, shuffled nulls, and full ablation access that billion-parameter interpretability work structurally cannot have &mdash; and it maps carefully <em>why</em> per-token routing behaves as it does at small scale.</p>
+  <p>That is a legitimate thing to have built. The nine-experiment switching study in particular is a clean, honest, multi-angle negative result, and the field's hype could use more of those. But it is not a paper with a novel claim, and none of it is a breakthrough.</p>
+  <p>The fork from here: <strong>wrap it up as understanding</strong> &mdash; capstone the switching study, run the literature check, call it done &mdash; or <strong>push one thread toward a contribution</strong>: multi-seed the load-balance finding, turn dense-sufficiency into a prospective predictive rule, and see whether either survives contact with the literature.</p>
+  </div>
+
+  <p class="foot">A standalone summary of a private research repository. Arithmetic results are 3-seed; all language-model figures are single-seed unless noted.</p>
+</section>
+
+</main>
+</div>
+
+</body>
+</html>
